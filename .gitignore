@@ -53,3 +53,12 @@ db-viewer/
 # .github/
 # Shard inspection temp files
 _shard_inspect/
+
+# Video-only local downloader: never publish sessions or partial downloads.
+.local-downloads/
+.icourse-downloads/
+.venv-download/
+*.cookie
+*.headers
+*.assembling
+*.incoming
