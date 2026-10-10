@@ -7,6 +7,7 @@ param(
     [string]$FFprobe,
     [string]$FFmpeg,
     [string]$Proxy,
+    [ValidateRange(1,16)][int]$Workers = 4,
     [string]$Python = 'python'
 )
 $ErrorActionPreference = 'Stop'
@@ -24,7 +25,7 @@ if (-not (Test-Path -LiteralPath $dependenciesReady)) {
     if ($LASTEXITCODE -ne 0) { throw '下载依赖安装失败，重跑即可重试。' }
     Set-Content -LiteralPath $dependenciesReady -Value 'ready'
 }
-$arguments = @((Join-Path $PSScriptRoot 'download_videos.py'), '--course-id', $CourseId, '--output', $Output)
+$arguments = @((Join-Path $PSScriptRoot 'download_videos.py'), '--course-id', $CourseId, '--output', $Output, '--workers', [string]$Workers)
 if ($Download) { $arguments += '--download' }
 if ($Login) { $arguments += '--login' }
 if ($CookieFile) { $arguments += @('--cookie-file', $CookieFile) }

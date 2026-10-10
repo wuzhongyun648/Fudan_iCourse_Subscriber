@@ -189,7 +189,7 @@ def parse_headers(path):
     block = next((b for b in reversed(blocks) if b.startswith('HTTP/')), '')
     lines = block.splitlines()
     if not lines:
-        raise DownloadError('视频服务器未返回响应头。')
+        return 0, {}
     return int(lines[0].split()[1]), {k.lower().strip(): v.strip()
         for k, v in (line.split(':', 1) for line in lines[1:] if ':' in line)}
 
@@ -200,7 +200,8 @@ class MediaTransfer:
         self.stop = threading.Event()
 
     def fetch(self, start, end, target, expected=None):
-        for attempt in range(4):
+        last_status = None
+        for attempt in range(6):
             if self.stop.is_set():
                 raise DownloadError('下载已停止。')
             signed = self.client.sign_video_url(self.info['base'],
@@ -224,8 +225,9 @@ class MediaTransfer:
                                         capture_output=True)
                 if headers.exists():
                     status, fields = parse_headers(headers)
+                    last_status = status
                     match = re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)', fields.get('content-range', ''))
-                    if status in (401, 403):
+                    if status == 401:
                         raise DownloadError('视频鉴权失败，可能需要 --login 刷新会话。')
                     if result.returncode == 0:
                         if status != 206 or not match or tuple(map(int, match.groups()[:2])) != (start, end):
@@ -236,8 +238,12 @@ class MediaTransfer:
                         if target.stat().st_size != end - start + 1:
                             raise DownloadError('视频分段长度不完整。')
                         return meta
-            if attempt < 3:
-                time.sleep(2 ** attempt)
+            if attempt < 5:
+                time.sleep(min(2 ** (attempt + 1), 20))
+        if last_status == 403:
+            if not self.client.check_alive():
+                raise DownloadError('登录会话已失效，请用 --login 重新登录后续传。')
+            raise DownloadError('登录仍有效，但视频服务器持续拒绝该分段；已保留分段，请稍后重试。')
         raise DownloadError('视频分段下载失败；已完成的分段保留，重跑可续传。')
 
 
@@ -339,7 +345,7 @@ def main(argv=None):
     parser.add_argument('--download', action='store_true', help='真正下载；默认只列出并探测')
     parser.add_argument('--sub-ids', nargs='+', help='只处理这些课次 ID；不填则处理所有可回放课次')
     parser.add_argument('--proxy', default='', help='默认直连；可显式指定代理地址')
-    parser.add_argument('--workers', type=int, default=8, choices=range(1, 17))
+    parser.add_argument('--workers', type=int, default=4, choices=range(1, 17))
     parser.add_argument('--ffprobe', default=shutil.which('ffprobe'))
     parser.add_argument('--ffmpeg', default=shutil.which('ffmpeg'), help='可选：抽查头、中、尾解码')
     args = parser.parse_args(argv)
